@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from src.core.http_client import HttpClient, HttpResponse
+from src.core.http.http_client import HttpClient, HttpResponse
 from src.payloads.crds.create_user import CreateUserRequest
 
 

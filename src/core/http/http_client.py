@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 import requests
 
 from .schema_validator import SchemaValidationError, SchemaValidator
-from .token_manager import TokenManager
+from ..security.token_manager import TokenManager
 
 
 logger = logging.getLogger(__name__)

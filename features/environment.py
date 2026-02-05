@@ -10,11 +10,11 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from src.clients.crds.user_client import CrdsUserClient
-from src.core.config import Config
-from src.core.db_client import DbClient
-from src.core.http_client import HttpClient
-from src.core.kafka_client import KafkaClient
-from src.core.token_manager import TokenManager
+from src.core.config.config import Config
+from src.core.db.db_client import DbClient
+from src.core.http.http_client import HttpClient
+from src.core.messaging.kafka_client import KafkaClient
+from src.core.security.token_manager import TokenManager
 from src.systems.crds.user import CRDSUser
 
 

@@ -42,7 +42,6 @@ class KafkaClient:
 
         self._producer = None
         self._consumer = None
-        self._backend = None
         self._init_backend()
 
     def _init_backend(self) -> None:
@@ -60,45 +59,15 @@ class KafkaClient:
             consumer_config.update(self._security_config)
             self._producer = Producer(producer_config)
             self._consumer = Consumer(consumer_config)
-            self._backend = "confluent"
-            return
-        except Exception:
-            pass
-
-        try:
-            from kafka import KafkaConsumer, KafkaProducer
-
-            producer_kwargs = {"bootstrap_servers": self._bootstrap_servers}
-            producer_kwargs.update(self._security_config)
-            consumer_kwargs = {
-                "bootstrap_servers": self._bootstrap_servers,
-                "group_id": self._group_id,
-                "auto_offset_reset": "earliest",
-                "enable_auto_commit": False,
-                "consumer_timeout_ms": 1000,
-            }
-            consumer_kwargs.update(self._security_config)
-            self._producer = KafkaProducer(**producer_kwargs)
-            self._consumer = KafkaConsumer(**consumer_kwargs)
-            self._backend = "kafka-python"
             return
         except Exception as exc:  # noqa: BLE001
-            raise KafkaClientError(
-                "Kafka backend not available; install confluent-kafka or kafka-python"
-            ) from exc
+            raise KafkaClientError("confluent-kafka is required for KafkaClient") from exc
 
     def close(self) -> None:
-        if self._backend == "confluent":
-            if self._producer:
-                self._producer.flush(10)
-            if self._consumer:
-                self._consumer.close()
-        elif self._backend == "kafka-python":
-            if self._producer:
-                self._producer.flush(timeout=10)
-                self._producer.close()
-            if self._consumer:
-                self._consumer.close()
+        if self._producer:
+            self._producer.flush(10)
+        if self._consumer:
+            self._consumer.close()
 
     def produce(
         self,
@@ -109,10 +78,7 @@ class KafkaClient:
         headers: Mapping[str, str] | None = None,
         timeout: float = 10.0,
     ) -> None:
-        if self._backend == "confluent":
-            self._produce_confluent(topic, value, key=key, headers=headers, timeout=timeout)
-            return
-        self._produce_kafka_python(topic, value, key=key, headers=headers, timeout=timeout)
+        self._produce_confluent(topic, value, key=key, headers=headers, timeout=timeout)
 
     def _produce_confluent(
         self,
@@ -139,63 +105,24 @@ class KafkaClient:
         if errors:
             raise KafkaClientError(f"Kafka produce failed: {errors[0]}")
 
-    def _produce_kafka_python(
-        self,
-        topic: str,
-        value: Any,
-        *,
-        key: str | bytes | None = None,
-        headers: Mapping[str, str] | None = None,
-        timeout: float,
-    ) -> None:
-        assert self._producer is not None
-        payload = self._encode_value(value)
-        k = self._encode_key(key)
-        hdrs = self._encode_headers(headers)
-        future = self._producer.send(topic, value=payload, key=k, headers=hdrs)
-        future.get(timeout=timeout)
-
     def subscribe(self, topics: Iterable[str]) -> None:
-        if self._backend == "confluent":
-            assert self._consumer is not None
-            self._consumer.subscribe(list(topics))
-        else:
-            assert self._consumer is not None
-            self._consumer.subscribe(list(topics))
+        assert self._consumer is not None
+        self._consumer.subscribe(list(topics))
 
     def consume(self, timeout: float = 1.0) -> KafkaMessage | None:
-        if self._backend == "confluent":
-            assert self._consumer is not None
-            msg = self._consumer.poll(timeout)
-            if msg is None:
-                return None
-            if msg.error():
-                raise KafkaClientError(f"Kafka consume error: {msg.error()}")
-            return KafkaMessage(
-                topic=msg.topic(),
-                key=msg.key(),
-                value=msg.value(),
-                headers=dict(msg.headers() or {}),
-                timestamp_ms=msg.timestamp()[1] if msg.timestamp() else None,
-            )
-
         assert self._consumer is not None
-        records = self._consumer.poll(timeout_ms=int(timeout * 1000))
-        if not records:
+        msg = self._consumer.poll(timeout)
+        if msg is None:
             return None
-        for _, messages in records.items():
-            for msg in messages:
-                timestamp = msg.timestamp
-                if isinstance(timestamp, tuple):
-                    timestamp = timestamp[1]
-                return KafkaMessage(
-                    topic=msg.topic,
-                    key=msg.key,
-                    value=msg.value,
-                    headers=dict(msg.headers or []),
-                    timestamp_ms=timestamp,
-                )
-        return None
+        if msg.error():
+            raise KafkaClientError(f"Kafka consume error: {msg.error()}")
+        return KafkaMessage(
+            topic=msg.topic(),
+            key=msg.key(),
+            value=msg.value(),
+            headers=dict(msg.headers() or {}),
+            timestamp_ms=msg.timestamp()[1] if msg.timestamp() else None,
+        )
 
     def wait(
         self,

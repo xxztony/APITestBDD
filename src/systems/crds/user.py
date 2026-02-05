@@ -5,10 +5,10 @@ import logging
 from typing import Any, Mapping
 
 from src.clients.crds.user_client import CrdsUserClient
-from src.core.config import Config
-from src.core.db_client import DbClient
-from src.core.http_client import HttpClient, HttpResponse
-from src.core.kafka_client import KafkaClient, KafkaMessage
+from src.core.config.config import Config
+from src.core.db.db_client import DbClient
+from src.core.http.http_client import HttpClient, HttpResponse
+from src.core.messaging.kafka_client import KafkaClient, KafkaMessage
 from src.payloads.crds.create_user import CreateUserRequest
 
 
