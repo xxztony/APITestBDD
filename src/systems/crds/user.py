@@ -44,6 +44,40 @@ class CRDSUser:
             validate_schema=validate_schema,
         )
 
+    def query_user(
+        self,
+        user_id: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
+        schema: Any | None = None,
+        validate_schema: bool | None = None,
+    ) -> HttpResponse:
+        return self._client.get_user(
+            user_id,
+            headers=headers,
+            timeout=timeout,
+            schema=schema,
+            validate_schema=validate_schema,
+        )
+
+    def delete_user(
+        self,
+        user_id: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
+        schema: Any | None = None,
+        validate_schema: bool | None = None,
+    ) -> HttpResponse:
+        return self._client.delete_user(
+            user_id,
+            headers=headers,
+            timeout=timeout,
+            schema=schema,
+            validate_schema=validate_schema,
+        )
+
     def create_user_and_verify(
         self,
         payload: CreateUserRequest,

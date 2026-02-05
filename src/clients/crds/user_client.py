@@ -22,7 +22,29 @@ class CrdsUserClient:
 
     def create_user(
         self,
-        payload: CreateUserRequest,
+        payload: CreateUserRequest | Mapping[str, Any],
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
+        schema: Any | None = None,
+        validate_schema: bool | None = None,
+    ) -> HttpResponse:
+        if not isinstance(payload, CreateUserRequest):
+            payload = CreateUserRequest.default().override(**dict(payload))
+        return self._http_client.request(
+            method="POST",
+            path=self._base_path,
+            service=self._service,
+            json_body=payload.to_dict(),
+            headers=headers,
+            timeout=timeout,
+            schema=schema,
+            validate_schema=validate_schema,
+        )
+
+    def get_user(
+        self,
+        user_id: str,
         *,
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
@@ -30,10 +52,28 @@ class CrdsUserClient:
         validate_schema: bool | None = None,
     ) -> HttpResponse:
         return self._http_client.request(
-            method="POST",
-            path=self._base_path,
+            method="GET",
+            path=f"{self._base_path}/{user_id}",
             service=self._service,
-            json_body=payload.to_dict(),
+            headers=headers,
+            timeout=timeout,
+            schema=schema,
+            validate_schema=validate_schema,
+        )
+
+    def delete_user(
+        self,
+        user_id: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
+        schema: Any | None = None,
+        validate_schema: bool | None = None,
+    ) -> HttpResponse:
+        return self._http_client.request(
+            method="DELETE",
+            path=f"{self._base_path}/{user_id}",
+            service=self._service,
             headers=headers,
             timeout=timeout,
             schema=schema,
