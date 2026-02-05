@@ -1,0 +1,9 @@
+from __future__ import annotations
+
+from enum import Enum
+
+
+class UserStatus(str, Enum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    SUSPENDED = "SUSPENDED"
