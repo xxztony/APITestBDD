@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from behave import when
 
 
@@ -30,9 +32,13 @@ def _resolve_placeholders(state, data):
     resolved = {}
     for key, value in data.items():
         if value == "<from previous step>":
-            resolved[key] = vars_map.get("user_id")
+            resolved[key] = vars_map.get("last_id") or vars_map.get("user_id")
         else:
-            resolved[key] = value
+            match = re.fullmatch(r"\$\{(.+)\}", value)
+            if match:
+                resolved[key] = vars_map.get(match.group(1))
+            else:
+                resolved[key] = value
     return resolved
 
 
@@ -64,7 +70,8 @@ def _call_client(context, client_name: str, method_name: str, *, body=None, para
     context.last_response = response
     if getattr(response, "json", None) and isinstance(response.json, dict) and response.json.get("id"):
         vars_map = state.get("vars") or {}
-        vars_map["user_id"] = str(response.json.get("id"))
+        vars_map["last_id"] = str(response.json.get("id"))
+        vars_map.setdefault("user_id", vars_map["last_id"])
         state["vars"] = vars_map
 
 
