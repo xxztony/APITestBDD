@@ -147,6 +147,17 @@ class KafkaClient:
                 raise KafkaClientError(f"Predicate failed: {exc}") from exc
         raise KafkaClientError(f"Timeout waiting for message on {topic} after {timeout}s")
 
+    def get_end_offset(self, topic: str, partition: int = 0, timeout: float = 5.0) -> int:
+        try:
+            from confluent_kafka import TopicPartition
+        except Exception as exc:  # noqa: BLE001
+            raise KafkaClientError("confluent-kafka is required for KafkaClient") from exc
+
+        assert self._consumer is not None
+        tp = TopicPartition(topic, partition)
+        _, high = self._consumer.get_watermark_offsets(tp, timeout=timeout)
+        return int(high)
+
     @staticmethod
     def _encode_value(value: Any) -> bytes | None:
         if value is None:
@@ -168,3 +179,15 @@ class KafkaClient:
         if not headers:
             return None
         return [(k, v.encode("utf-8")) for k, v in headers.items()]
+
+
+if __name__ == "__main__":
+    kafka = KafkaClient(
+        bootstrap_servers="broker1:9092,broker2:9092",
+        scenario_id="offset-check",
+    )
+    try:
+        end_offset = kafka.get_end_offset(topic="my_topic", partition=0, timeout=5.0)
+        print(f"end_offset: {end_offset}")
+    finally:
+        kafka.close()
