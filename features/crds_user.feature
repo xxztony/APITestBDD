@@ -4,7 +4,7 @@ Feature: CRDS User API
     Given I am authenticated as CRDS user
 
   Scenario: Create CRDS user with custom attributes
-    When I create a CRDS user with attributes:
+    When I create a CRDS user with attributes as "create_user" response:
       | risk_level | HIGH |
       | country    | US   |
       | name       | VIP  |

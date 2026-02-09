@@ -158,6 +158,44 @@ class KafkaClient:
         _, high = self._consumer.get_watermark_offsets(tp, timeout=timeout)
         return int(high)
 
+    def consume_from_offset(
+        self,
+        *,
+        topic: str,
+        partition: int = 0,
+        offset: int = 0,
+        max_messages: int = 1,
+        timeout: float = 5.0,
+        poll_interval: float = 0.5,
+    ) -> list[KafkaMessage]:
+        try:
+            from confluent_kafka import TopicPartition
+        except Exception as exc:  # noqa: BLE001
+            raise KafkaClientError("confluent-kafka is required for KafkaClient") from exc
+
+        assert self._consumer is not None
+        tp = TopicPartition(topic, partition, offset)
+        self._consumer.assign([tp])
+
+        messages: list[KafkaMessage] = []
+        deadline = time.time() + timeout
+        while time.time() < deadline and len(messages) < max_messages:
+            msg = self._consumer.poll(poll_interval)
+            if msg is None:
+                continue
+            if msg.error():
+                raise KafkaClientError(f"Kafka consume error: {msg.error()}")
+            messages.append(
+                KafkaMessage(
+                    topic=msg.topic(),
+                    key=msg.key(),
+                    value=msg.value(),
+                    headers=dict(msg.headers() or {}),
+                    timestamp_ms=msg.timestamp()[1] if msg.timestamp() else None,
+                )
+            )
+        return messages
+
     @staticmethod
     def _encode_value(value: Any) -> bytes | None:
         if value is None:

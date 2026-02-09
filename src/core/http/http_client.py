@@ -13,6 +13,15 @@ from ..security.token_manager import TokenManager
 
 
 logger = logging.getLogger(__name__)
+try:
+    import allure
+    from allure_commons.types import AttachmentType
+
+    _ALLURE_AVAILABLE = True
+except Exception:  # noqa: BLE001
+    allure = None
+    AttachmentType = None
+    _ALLURE_AVAILABLE = False
 
 
 class HttpClientError(RuntimeError):
@@ -71,6 +80,16 @@ class HttpClient:
         effective_timeout = timeout if timeout is not None else self._timeout
         validate = self._validate_schema if validate_schema is None else validate_schema
 
+        if _ALLURE_AVAILABLE:
+            self._attach_request(
+                method=method,
+                url=url,
+                headers=req_headers,
+                params=params,
+                data=data,
+                json_body=json_body,
+            )
+
         try:
             response = self._session.request(
                 method=method.upper(),
@@ -113,10 +132,54 @@ class HttpClient:
                     response=response,
                 ) from exc
 
-        return HttpResponse(
+        http_response = HttpResponse(
             status_code=response.status_code,
             headers=response.headers,
             text=response.text,
             json=response_json,
             raw=response,
+        )
+        if _ALLURE_AVAILABLE:
+            self._attach_response(http_response)
+        return http_response
+
+    @staticmethod
+    def _attach_request(
+        *,
+        method: str,
+        url: str,
+        headers: Mapping[str, str] | None,
+        params: Mapping[str, Any] | None,
+        data: Any | None,
+        json_body: Any | None,
+    ) -> None:
+        if not _ALLURE_AVAILABLE:
+            return
+        payload = {
+            "method": method.upper(),
+            "url": url,
+            "headers": dict(headers or {}),
+            "params": dict(params or {}),
+            "json": json_body,
+            "data": data,
+        }
+        allure.attach(
+            json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+            name="HTTP Request",
+            attachment_type=AttachmentType.JSON,
+        )
+
+    @staticmethod
+    def _attach_response(response: HttpResponse) -> None:
+        if not _ALLURE_AVAILABLE:
+            return
+        payload = {
+            "status_code": response.status_code,
+            "headers": dict(response.headers or {}),
+            "body": response.json if response.json is not None else response.text,
+        }
+        allure.attach(
+            json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+            name="HTTP Response",
+            attachment_type=AttachmentType.JSON,
         )

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 import json
+import re
 
-from behave import then
+from behave import given, then
 
 
 def _get_state(context):
@@ -36,13 +37,48 @@ def _get_json_body(response):
         return None
 
 
-def _get_field(body: Mapping, path: str):
+def _get_field(body, path: str):
     current = body
     for part in path.split("."):
-        if not isinstance(current, Mapping) or part not in current:
+        tokens = list(re.finditer(r"([^\[\]]+)|\[(\d+)\]", part))
+        if not tokens:
             return None, False
-        current = current[part]
+        for token in tokens:
+            key = token.group(1)
+            if key is not None:
+                if not isinstance(current, Mapping) or key not in current:
+                    return None, False
+                current = current[key]
+                continue
+            index = token.group(2)
+            if index is not None:
+                if not isinstance(current, Sequence) or isinstance(current, (str, bytes, Mapping)):
+                    return None, False
+                idx = int(index)
+                if idx < 0 or idx >= len(current):
+                    return None, False
+                current = current[idx]
     return current, True
+
+
+def _get_named_response(context, response_name: str):
+    state = _get_state(context)
+    responses = state.get("responses") or {}
+    response = responses.get(response_name)
+    if response is None:
+        raise AssertionError(f"Response '{response_name}' not found; store it with 'as \"{response_name}\" response'.")
+    return response
+
+
+@given('I use response "{response_name}"')
+def step_use_response(context, response_name: str) -> None:
+    state = _get_state(context)
+    responses = state.get("responses") or {}
+    response = responses.get(response_name)
+    if response is None:
+        raise AssertionError(f"Response '{response_name}' not found; store it with 'as \"{response_name}\" response'.")
+    state["response"] = response
+    context.last_response = response
 
 
 @then("HTTP status should be {status_code:d}")
@@ -103,6 +139,35 @@ def step_response_field_equals(context, field_name: str, expected_value: str) ->
     value, exists = _get_field(body, field_name)
     assert exists, f"Missing field '{field_name}' in response"
     assert str(value) == expected_value, f"Expected {field_name}={expected_value!r}, got {value!r}"
+
+
+@then(
+    'response "{left_response}" field "{left_field}" should equal '
+    'response "{right_response}" field "{right_field}"'
+)
+def step_response_fields_equal(
+    context,
+    left_response: str,
+    left_field: str,
+    right_response: str,
+    right_field: str,
+) -> None:
+    left = _get_named_response(context, left_response)
+    right = _get_named_response(context, right_response)
+    left_body = _get_json_body(left)
+    right_body = _get_json_body(right)
+    if not isinstance(left_body, Mapping):
+        raise AssertionError(f"Response '{left_response}' JSON is not an object")
+    if not isinstance(right_body, Mapping):
+        raise AssertionError(f"Response '{right_response}' JSON is not an object")
+    left_value, left_exists = _get_field(left_body, left_field)
+    right_value, right_exists = _get_field(right_body, right_field)
+    assert left_exists, f"Missing field '{left_field}' in response '{left_response}'"
+    assert right_exists, f"Missing field '{right_field}' in response '{right_response}'"
+    assert left_value == right_value, (
+        f"Expected response '{left_response}' field '{left_field}' to equal "
+        f"response '{right_response}' field '{right_field}', got {left_value!r} vs {right_value!r}"
+    )
 
 
 @then('I store response field "{field_name}" as "{var_name}"')
