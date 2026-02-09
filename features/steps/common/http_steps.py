@@ -61,6 +61,13 @@ def step_clear_request_context(context) -> None:
     state = _get_state(context)
     state["request"] = {"headers": {}, "params": {}, "json": {}}
     state.pop("headers", None)
+    state.pop("service", None)
+
+
+@given('I use service "{service}"')
+def step_use_service(context, service: str) -> None:
+    state = _get_state(context)
+    state["service"] = service
 
 
 @given('I use base URL "{base_url}"')
@@ -97,6 +104,7 @@ def step_send_request(context, method: str, path: str) -> None:
     response = client.request(
         method=method,
         path=_render_path(state, path),
+        service=state.get("service"),
         params=request_ctx.get("params"),
         json_body=request_ctx.get("json"),
         headers=request_ctx.get("headers") or state.get("headers"),
@@ -116,6 +124,7 @@ def step_send_request_with_params(context, method: str, path: str) -> None:
     response = client.request(
         method=method,
         path=_render_path(state, path),
+        service=state.get("service"),
         params=merged,
         json_body=request_ctx.get("json"),
         headers=request_ctx.get("headers") or state.get("headers"),
@@ -135,6 +144,7 @@ def step_send_request_with_body(context, method: str, path: str) -> None:
     response = client.request(
         method=method,
         path=_render_path(state, path),
+        service=state.get("service"),
         params=request_ctx.get("params"),
         json_body=merged,
         headers=request_ctx.get("headers") or state.get("headers"),
