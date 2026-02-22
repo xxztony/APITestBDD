@@ -5,20 +5,14 @@ from typing import Any, Mapping
 
 
 class ScenarioData:
-    """Lightweight helper over shared_data dict for API-first usage."""
+    """Lightweight helper over shared_data dict for API-first usage (api-only layout)."""
 
     TEMPLATE = {
-        "common": {
-            "entities": {},
-            "vars": {},
-            "db": {},
-            "kafka": {},
-        },
         "api": {
             "responses": {},
             "requests": {},
-        },
-        "ui": {
+            "entities": {},
+            "vars": {},
             "artifacts": {},
             "pages": {},
         },
@@ -27,14 +21,14 @@ class ScenarioData:
     def __init__(self, context: Any, shared_data: dict[str, Any] | None = None) -> None:
         self.context = context
         self.raw: dict[str, Any] = copy.deepcopy(shared_data) if shared_data is not None else copy.deepcopy(self.TEMPLATE)
-        self.raw.setdefault("common", {}).setdefault("entities", {})
-        self.raw["common"].setdefault("vars", {})
-        self.raw["common"].setdefault("db", {})
-        self.raw["common"].setdefault("kafka", {})
-        self.raw.setdefault("api", {}).setdefault("responses", {})
-        self.raw["api"].setdefault("requests", {})
-        self.raw.setdefault("ui", {}).setdefault("artifacts", {})
-        self.raw["ui"].setdefault("pages", {})
+        self.raw.setdefault("api", {})
+        api = self.raw["api"]
+        api.setdefault("responses", {})
+        api.setdefault("requests", {})
+        api.setdefault("entities", {})
+        api.setdefault("vars", {})
+        api.setdefault("artifacts", {})
+        api.setdefault("pages", {})
 
     # ---------- API responses ----------
     def put_response(self, alias: str, response: Any, *, overwrite: bool = False) -> None:
@@ -57,14 +51,14 @@ class ScenarioData:
     def put_entity(self, alias: str, value: Any, *, overwrite: bool = True) -> None:
         if not alias:
             raise ValueError("Entity alias must be non-empty")
-        entities = self.raw["common"]["entities"]
+        entities = self.raw["api"]["entities"]
         if alias in entities and not overwrite:
             existing = ", ".join(sorted(entities.keys()))
             raise ValueError(f"Entity alias '{alias}' already exists. Existing: [{existing}]")
         entities[alias] = value
 
     def get_entity(self, alias: str) -> Any:
-        entities = self.raw["common"].get("entities") or {}
+        entities = self.raw["api"].get("entities") or {}
         if alias in entities:
             return entities[alias]
         available = ", ".join(sorted(entities.keys())) if entities else "<none>"
@@ -74,14 +68,14 @@ class ScenarioData:
     def put_var(self, alias: str, value: Any, *, overwrite: bool = True) -> None:
         if not alias:
             raise ValueError("Var alias must be non-empty")
-        vars_map = self.raw["common"]["vars"]
+        vars_map = self.raw["api"]["vars"]
         if alias in vars_map and not overwrite:
             existing = ", ".join(sorted(vars_map.keys()))
             raise ValueError(f"Var alias '{alias}' already exists. Existing: [{existing}]")
         vars_map[alias] = str(value) if value is not None else ""
 
     def get_var(self, alias: str) -> str:
-        vars_map = self.raw["common"].get("vars") or {}
+        vars_map = self.raw["api"].get("vars") or {}
         if alias in vars_map:
             return vars_map[alias]
         available = ", ".join(sorted(vars_map.keys())) if vars_map else "<none>"
@@ -94,11 +88,11 @@ class ScenarioData:
 
         def replace(match):
             name = match.group(1)
-            if name in self.raw["common"]["entities"]:
-                return str(self.raw["common"]["entities"][name])
-            if name in self.raw["common"]["vars"]:
-                return str(self.raw["common"]["vars"][name])
-            available = list(self.raw["common"]["entities"].keys()) + list(self.raw["common"]["vars"].keys())
+            if name in self.raw["api"]["entities"]:
+                return str(self.raw["api"]["entities"][name])
+            if name in self.raw["api"]["vars"]:
+                return str(self.raw["api"]["vars"][name])
+            available = list(self.raw["api"]["entities"].keys()) + list(self.raw["api"]["vars"].keys())
             raise KeyError(f"Placeholder '{name}' not found. Available: {sorted(available)}")
 
         import re
@@ -116,14 +110,14 @@ class ScenarioData:
             raise ValueError("Driver/session objects are not allowed in shared_data.ui.artifacts")
         else:
             raise ValueError("UI artifacts must be a string or lightweight mapping")
-        artifacts = self.raw["ui"]["artifacts"]
+        artifacts = self.raw["api"]["artifacts"]
         if alias in artifacts and not overwrite:
             existing = ", ".join(sorted(artifacts.keys()))
             raise ValueError(f"UI artifact alias '{alias}' already exists. Existing: [{existing}]")
         artifacts[alias] = value
 
     def get_ui_artifact(self, alias: str) -> Any:
-        artifacts = self.raw["ui"].get("artifacts") or {}
+        artifacts = self.raw["api"].get("artifacts") or {}
         if alias in artifacts:
             return artifacts[alias]
         available = ", ".join(sorted(artifacts.keys())) if artifacts else "<none>"
@@ -133,14 +127,6 @@ class ScenarioData:
     @property
     def api_state(self) -> dict[str, Any]:
         return self.raw["api"]
-
-    @property
-    def common(self) -> dict[str, Any]:
-        return self.raw["common"]
-
-    @property
-    def ui_state(self) -> dict[str, Any]:
-        return self.raw["ui"]
 
     def get_request_context(self) -> dict[str, Any]:
         requests = self.raw["api"].setdefault("requests", {})
