@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+import os
+import re
+
 from behave import given, when
 
 from src.core.http.http_client import HttpClient
@@ -48,18 +52,70 @@ def _resolve_placeholders(data, mapping):
             except Exception:
                 resolved[key] = data.get_entity(inner)
         else:
-            try:
-                resolved[key] = data.resolve_placeholders(value)
-            except KeyError:
-                resolved[key] = value
+            resolved_text = _resolve_text_placeholders(data, str(value))
+            resolved[key] = _maybe_parse_inline_json(resolved_text)
     return resolved
 
 
 def _render_path(data, path: str) -> str:
     try:
-        return data.resolve_placeholders(path)
+        return _resolve_text_placeholders(data, path)
     except KeyError as exc:
         raise AssertionError(f"Missing path variable: {exc.args[0]}") from exc
+
+
+def _resolve_text_placeholders(data, text: str) -> str:
+    if not isinstance(text, str):
+        return text
+
+    if text.startswith("${") and text.endswith("}"):
+        key = text[2:-1]
+        try:
+            return str(data.get_var(key))
+        except Exception:
+            return str(data.get_entity(key))
+
+    pattern = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+    def _replace(match):
+        key = match.group(1)
+        try:
+            return str(data.get_entity(key))
+        except KeyError:
+            return str(data.get_var(key))
+
+    return pattern.sub(_replace, text)
+
+
+def _maybe_parse_inline_json(value):
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if (stripped.startswith("{") and stripped.endswith("}")) or (
+        stripped.startswith("[") and stripped.endswith("]")
+    ):
+        try:
+            return json.loads(stripped)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
+def _load_raw_json_payload(data, raw_text: str):
+    resolved = _resolve_text_placeholders(data, raw_text or "")
+    try:
+        return json.loads(resolved)
+    except json.JSONDecodeError as exc:
+        raise AssertionError(f"Invalid raw JSON payload: {exc}") from exc
+
+
+def _load_json_payload_from_file(data, file_path: str):
+    abs_path = file_path if os.path.isabs(file_path) else os.path.join(os.getcwd(), file_path)
+    if not os.path.exists(abs_path):
+        raise AssertionError(f"Payload file not found: {file_path}")
+    with open(abs_path, "r", encoding="utf-8") as f:
+        raw = f.read()
+    return _load_raw_json_payload(data, raw)
 
 
 @given("I clear request context")
@@ -121,6 +177,20 @@ def step_send_request_with_body(context, method: str, path: str) -> None:
     _send_request(context, method, path, body=body)
 
 
+@when('I send "{method}" request to "{path}" with raw json body')
+def step_send_request_with_raw_json_body(context, method: str, path: str) -> None:
+    data = _get_data(context)
+    body = _load_raw_json_payload(data, context.text or "")
+    _send_request(context, method, path, body=body)
+
+
+@when('I send "{method}" request to "{path}" with body from file "{file_path}"')
+def step_send_request_with_body_from_file(context, method: str, path: str, file_path: str) -> None:
+    data = _get_data(context)
+    body = _load_json_payload_from_file(data, file_path)
+    _send_request(context, method, path, body=body)
+
+
 @when('I send "{method}" request to "{path}" as "{response_alias}" response')
 def step_send_request_with_alias(context, method: str, path: str, response_alias: str) -> None:
     _send_request(context, method, path, alias=response_alias)
@@ -133,16 +203,22 @@ def _send_request(context, method: str, path: str, params=None, body=None, alias
     merged_params = dict(request_ctx.get("params") or {})
     if params:
         merged_params.update(params)
-    merged_body = dict(request_ctx.get("json") or {})
-    if body:
+    request_json = request_ctx.get("json") or {}
+    if body is None:
+        merged_body = dict(request_json)
+    elif isinstance(body, dict):
+        merged_body = dict(request_json)
         merged_body.update(body)
+    else:
+        # raw JSON body may be list/scalar; do not merge with key/value context
+        merged_body = body
     client = _get_http_client(context)
     response = client.request(
         method=method,
         path=_render_path(data, path),
         service=api_state.get("service"),
         params=merged_params or None,
-        json_body=merged_body or None,
+        json_body=merged_body if merged_body not in ({}, "") else None,
         headers=request_ctx.get("headers") or api_state.get("headers"),
     )
     data.put_response("last", response, overwrite=True)

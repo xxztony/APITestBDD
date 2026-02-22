@@ -73,6 +73,34 @@ Then HTTP status should be 201
 Then I save response "last" field "id" as "user_id"
 ```
 `I send "{method}" request to "{path}" with body:` 适合临时构造 JSON 请求，body 来自 DataTable。
+内联 JSON 字符串会自动解析为对象/数组，例如：
+```gherkin
+When I send "POST" request to "/orders" with body:
+  | field   | value                                                            |
+  | user_id | {user_id}                                                        |
+  | items   | [{"sku":"SKU-1","qty":2},{"sku":"SKU-2","qty":1}]              |
+  | meta    | {"source":"web","tags":["vip","campaign-2024"]}                |
+```
+
+4) 原始 JSON body（推荐复杂 payload）
+```gherkin
+When I send "POST" request to "/orders" with raw json body
+"""
+{
+  "user_id": "{user_id}",
+  "items": [
+    {"sku": "SKU-1", "qty": 2},
+    {"sku": "SKU-2", "qty": 1}
+  ],
+  "meta": {"source": "web", "tags": ["vip", "campaign-2024"]}
+}
+"""
+```
+
+5) 从 JSON 文件加载 body
+```gherkin
+When I send "POST" request to "/orders" with body from file "features/data/orders/create_order.json"
+```
 
 使用封装客户端的 body 版：
 ```gherkin
@@ -82,6 +110,15 @@ When I call "create_user" on "crds_user" client with body:
 Then HTTP status should be 201
 ```
 `I call "{method_name}" on "{client_name}" client with body:` 会把 DataTable 转为 payload/字典后传给指定客户端方法。
+同样支持：
+```gherkin
+When I call "create_user" on "crds_user" client with raw json body
+"""
+{"email":"{user_email}","attributes":{"tier":"vip","tags":["new"]}}
+"""
+
+When I call "create_user" on "crds_user" client with body from file "features/data/crds/create_user.json"
+```
 
 ### 使用客户端方法（client_steps）
 适用于已有封装客户端（如 `context.clients["crds_user"]`）：
