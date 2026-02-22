@@ -7,15 +7,21 @@ import re
 from behave import given, then
 
 
-def _get_state(context):
-    return getattr(context, "http_state", None) or context.state
+def _get_data(context):
+    return getattr(context, "data", None)
 
 
-def _get_response(context):
-    state = _get_state(context)
-    response = state.get("response") or getattr(context, "last_response", None)
-    if response is None:
-        raise AssertionError("No response available in context.state['response'] or context.last_response")
+def _get_response(context, alias: str | None = None):
+    data = _get_data(context)
+    target_alias = alias or "last"
+    try:
+        response = data.get_response(target_alias)
+    except KeyError:
+        # fallback to legacy last_response
+        response = getattr(context, "last_response", None)
+        if response is None:
+            raise
+    context.last_response = response
     return response
 
 
@@ -40,7 +46,7 @@ def _get_json_body(response):
 def _get_field(body, path: str):
     current = body
     for part in path.split("."):
-        tokens = list(re.finditer(r"([^\[\]]+)|\[(\d+)\]", part))
+        tokens = list(re.finditer(r"([^\[\]]+)|(\[(\d+)\])", part))
         if not tokens:
             return None, False
         for token in tokens:
@@ -50,7 +56,7 @@ def _get_field(body, path: str):
                     return None, False
                 current = current[key]
                 continue
-            index = token.group(2)
+            index = token.group(3)
             if index is not None:
                 if not isinstance(current, Sequence) or isinstance(current, (str, bytes, Mapping)):
                     return None, False
@@ -61,24 +67,23 @@ def _get_field(body, path: str):
     return current, True
 
 
-def _get_named_response(context, response_name: str):
-    state = _get_state(context)
-    responses = state.get("responses") or {}
-    response = responses.get(response_name)
-    if response is None:
-        raise AssertionError(f"Response '{response_name}' not found; store it with 'as \"{response_name}\" response'.")
-    return response
+def _use_response_alias(context, alias: str) -> None:
+    response = _get_response(context, alias)
+    _get_data(context).put_response("last", response, overwrite=True)
+    context.last_response = response
 
 
 @given('I use response "{response_name}"')
 def step_use_response(context, response_name: str) -> None:
-    state = _get_state(context)
-    responses = state.get("responses") or {}
-    response = responses.get(response_name)
-    if response is None:
-        raise AssertionError(f"Response '{response_name}' not found; store it with 'as \"{response_name}\" response'.")
-    state["response"] = response
-    context.last_response = response
+    _use_response_alias(context, response_name)
+
+
+@then('response "{response_alias}" status should be {status_code:d}')
+def step_named_http_status(context, response_alias: str, status_code: int) -> None:
+    response = _get_response(context, response_alias)
+    assert response.status_code == status_code, (
+        f"Expected {status_code}, got {response.status_code}. Body={_body_preview(response)!r}"
+    )
 
 
 @then("HTTP status should be {status_code:d}")
@@ -138,7 +143,8 @@ def step_response_field_equals(context, field_name: str, expected_value: str) ->
         raise AssertionError("Response JSON is not an object")
     value, exists = _get_field(body, field_name)
     assert exists, f"Missing field '{field_name}' in response"
-    assert str(value) == expected_value, f"Expected {field_name}={expected_value!r}, got {value!r}"
+    expected = _get_data(context).resolve_placeholders(expected_value)
+    assert str(value) == expected, f"Expected {field_name}={expected!r}, got {value!r}"
 
 
 @then(
@@ -152,8 +158,8 @@ def step_response_fields_equal(
     right_response: str,
     right_field: str,
 ) -> None:
-    left = _get_named_response(context, left_response)
-    right = _get_named_response(context, right_response)
+    left = _get_response(context, left_response)
+    right = _get_response(context, right_response)
     left_body = _get_json_body(left)
     right_body = _get_json_body(right)
     if not isinstance(left_body, Mapping):
@@ -178,10 +184,20 @@ def step_store_response_field(context, field_name: str, var_name: str) -> None:
         raise AssertionError("Response JSON is not an object")
     value, exists = _get_field(body, field_name)
     assert exists, f"Missing field '{field_name}' in response"
-    state = _get_state(context)
-    vars_map = state.get("vars") or {}
-    vars_map[var_name] = value
-    state["vars"] = vars_map
+    data = _get_data(context)
+    data.put_var(var_name, value, overwrite=True)
+    data.put_entity(var_name, value, overwrite=True)
+
+
+@then('I save response "{response_alias}" field "{field_path}" as "{entity_alias}"')
+def step_save_response_field_as_entity(context, response_alias: str, field_path: str, entity_alias: str) -> None:
+    response = _get_response(context, response_alias)
+    body = _get_json_body(response)
+    if not isinstance(body, Mapping):
+        raise AssertionError("Response JSON is not an object")
+    value, exists = _get_field(body, field_path)
+    assert exists, f"Missing field '{field_path}' in response '{response_alias}'"
+    _get_data(context).put_entity(entity_alias, value, overwrite=True)
 
 
 @then("response array size should be {size:d}")
@@ -191,3 +207,5 @@ def step_response_array_size(context, size: int) -> None:
     if not isinstance(body, Sequence) or isinstance(body, (str, bytes, Mapping)):
         raise AssertionError("Response JSON is not an array")
     assert len(body) == size, f"Expected array size {size}, got {len(body)}"
+
+PYCODE

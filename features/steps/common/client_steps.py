@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import re
-
 from behave import when
 
 
-def _get_state(context):
-    return getattr(context, "http_state", None) or context.state
+def _get_data(context):
+    return getattr(context, "data", None)
 
 
 def _table_to_dict(table):
@@ -25,20 +23,24 @@ def _table_to_dict(table):
     return data
 
 
-def _resolve_placeholders(state, data):
-    if not data:
-        return data
-    vars_map = state.get("vars") or {}
+def _resolve_placeholders(data, mapping):
+    if not mapping:
+        return mapping
     resolved = {}
-    for key, value in data.items():
+    for key, value in mapping.items():
         if value == "<from previous step>":
-            resolved[key] = vars_map.get("last_id") or vars_map.get("user_id")
+            try:
+                resolved[key] = data.get_entity("last_id")
+            except Exception:
+                resolved[key] = data.get_var("last_id")
+        elif isinstance(value, str) and value.startswith("${") and value.endswith("}"):
+            inner = value[2:-1]
+            try:
+                resolved[key] = data.get_var(inner)
+            except Exception:
+                resolved[key] = data.get_entity(inner)
         else:
-            match = re.fullmatch(r"\$\{(.+)\}", value)
-            if match:
-                resolved[key] = vars_map.get(match.group(1))
-            else:
-                resolved[key] = value
+            resolved[key] = data.resolve_placeholders(value)
     return resolved
 
 
@@ -50,9 +52,9 @@ def _call_client(context, client_name: str, method_name: str, *, body=None, para
         raise AssertionError(f"Client '{client_name}' has no method '{method_name}'")
 
     method = getattr(client, method_name)
-    state = _get_state(context)
-    request_ctx = state.get("request") or {}
-    headers = request_ctx.get("headers") or state.get("headers")
+    data = _get_data(context)
+    request_ctx = data.get_request_context()
+    headers = request_ctx.get("headers") or data.api_state.get("headers")
 
     kwargs = {"headers": headers}
     if params:
@@ -66,13 +68,14 @@ def _call_client(context, client_name: str, method_name: str, *, body=None, para
             kwargs["payload"] = body
 
     response = method(**kwargs)
-    state["response"] = response
+    data.put_response("last", response, overwrite=True)
     context.last_response = response
     if getattr(response, "json", None) and isinstance(response.json, dict) and response.json.get("id"):
-        vars_map = state.get("vars") or {}
-        vars_map["last_id"] = str(response.json.get("id"))
-        vars_map.setdefault("user_id", vars_map["last_id"])
-        state["vars"] = vars_map
+        last_id = str(response.json.get("id"))
+        data.put_entity("last_id", last_id, overwrite=True)
+        data.put_entity("user_id", last_id, overwrite=True)
+        data.put_var("last_id", last_id, overwrite=True)
+        data.put_var("user_id", last_id, overwrite=True)
 
 
 @when('I call "{method_name}" on "{client_name}" client')
@@ -82,13 +85,21 @@ def step_call_client_no_params(context, method_name: str, client_name: str) -> N
 
 @when('I call "{method_name}" on "{client_name}" client with params:')
 def step_call_client_with_params(context, method_name: str, client_name: str) -> None:
-    state = _get_state(context)
-    params = _resolve_placeholders(state, _table_to_dict(context.table))
+    data = _get_data(context)
+    params = _resolve_placeholders(data, _table_to_dict(context.table))
     _call_client(context, client_name, method_name, params=params)
 
 
 @when('I call "{method_name}" on "{client_name}" client with body:')
 def step_call_client_with_body(context, method_name: str, client_name: str) -> None:
-    state = _get_state(context)
-    body = _resolve_placeholders(state, _table_to_dict(context.table))
+    data = _get_data(context)
+    body = _resolve_placeholders(data, _table_to_dict(context.table))
     _call_client(context, client_name, method_name, body=body)
+
+
+@when('I call "{method_name}" on "{client_name}" client as "{response_alias}" response')
+def step_call_client_with_alias(context, method_name: str, client_name: str, response_alias: str) -> None:
+    _call_client(context, client_name, method_name)
+    context.data.put_response(response_alias, context.last_response, overwrite=False)
+
+PYCODE

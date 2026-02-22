@@ -7,14 +7,8 @@ from behave import given, when
 from src.core.messaging.kafka_client import KafkaClient
 
 
-def _get_state(context):
-    return getattr(context, "http_state", None) or context.state
-
-
-def _get_vars(state):
-    vars_map = state.get("vars") or {}
-    state["vars"] = vars_map
-    return vars_map
+def _get_data(context):
+    return getattr(context, "data", None)
 
 
 def _require_kafka_client(context) -> KafkaClient:
@@ -24,7 +18,7 @@ def _require_kafka_client(context) -> KafkaClient:
     return client
 
 
-def _resolve_offset_expr(state, expr: str) -> int:
+def _resolve_offset_expr(data, expr: str) -> int:
     expr = expr.strip()
     if re.fullmatch(r"-?\d+", expr):
         return int(expr)
@@ -32,21 +26,23 @@ def _resolve_offset_expr(state, expr: str) -> int:
     if not match:
         raise AssertionError(f"Invalid offset expression '{expr}'. Use integer or ${'{var}'}")
     var_name = match.group(1)
-    vars_map = _get_vars(state)
-    if var_name not in vars_map:
-        raise AssertionError(f"Missing variable '{var_name}' for offset expression")
     try:
-        return int(vars_map[var_name])
+        raw = data.get_var(var_name)
+    except KeyError as exc:
+        raise AssertionError(f"Missing variable '{var_name}' for offset expression") from exc
+    try:
+        return int(raw)
     except (TypeError, ValueError) as exc:
-        raise AssertionError(f"Variable '{var_name}' is not an int: {vars_map[var_name]!r}") from exc
+        raise AssertionError(f"Variable '{var_name}' is not an int: {raw!r}") from exc
 
 
 @given('I store Kafka topic "{topic}" partition {partition:d} end offset as "{var_name}"')
 def step_store_kafka_end_offset(context, topic: str, partition: int, var_name: str) -> None:
-    state = _get_state(context)
+    data = _get_data(context)
     client = _require_kafka_client(context)
     offset = client.get_end_offset(topic=topic, partition=partition)
-    _get_vars(state)[var_name] = offset
+    data.put_var(var_name, offset, overwrite=True)
+    data.common.setdefault("kafka", {})[var_name] = offset
 
 
 @when(
@@ -60,10 +56,12 @@ def step_read_kafka_messages_with_shift(
     offset_expr: str,
     shift: int,
 ) -> None:
-    state = _get_state(context)
+    data = _get_data(context)
     client = _require_kafka_client(context)
-    base_offset = _resolve_offset_expr(state, offset_expr)
+    base_offset = _resolve_offset_expr(data, offset_expr)
     offset = base_offset + shift
     messages = client.consume_from_offset(topic=topic, partition=partition, offset=offset)
-    state["kafka_messages"] = messages
-    state["kafka_message"] = messages[0] if messages else None
+    data.common.setdefault("kafka", {})["messages"] = messages
+    data.common.setdefault("kafka", {})["message"] = messages[0] if messages else None
+
+PYCODE
