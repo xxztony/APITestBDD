@@ -7,16 +7,7 @@ from typing import Any, Mapping
 class ScenarioData:
     """Lightweight helper over shared_data dict for API-first usage (api-only layout)."""
 
-    TEMPLATE = {
-        "api": {
-            "responses": {},
-            "requests": {},
-            "entities": {},
-            "vars": {},
-            "artifacts": {},
-            "pages": {},
-        },
-    }
+    TEMPLATE = {"api": {"responses": {}, "requests": {}, "entities": {}, "vars": {}}}
 
     def __init__(self, context: Any, shared_data: dict[str, Any] | None = None) -> None:
         self.context = context
@@ -27,8 +18,6 @@ class ScenarioData:
         api.setdefault("requests", {})
         api.setdefault("entities", {})
         api.setdefault("vars", {})
-        api.setdefault("artifacts", {})
-        api.setdefault("pages", {})
 
     # ---------- API responses ----------
     def put_response(self, alias: str, response: Any, *, overwrite: bool = False) -> None:
@@ -101,28 +90,6 @@ class ScenarioData:
         return pattern.sub(replace, text)
 
     # ---------- UI artifacts ----------
-    def put_ui_artifact(self, alias: str, value: Any, *, overwrite: bool = True) -> None:
-        if not alias:
-            raise ValueError("UI artifact alias must be non-empty")
-        if isinstance(value, (Mapping, str)):
-            pass
-        elif hasattr(value, "quit") or hasattr(value, "close"):
-            raise ValueError("Driver/session objects are not allowed in shared_data.ui.artifacts")
-        else:
-            raise ValueError("UI artifacts must be a string or lightweight mapping")
-        artifacts = self.raw["api"]["artifacts"]
-        if alias in artifacts and not overwrite:
-            existing = ", ".join(sorted(artifacts.keys()))
-            raise ValueError(f"UI artifact alias '{alias}' already exists. Existing: [{existing}]")
-        artifacts[alias] = value
-
-    def get_ui_artifact(self, alias: str) -> Any:
-        artifacts = self.raw["api"].get("artifacts") or {}
-        if alias in artifacts:
-            return artifacts[alias]
-        available = ", ".join(sorted(artifacts.keys())) if artifacts else "<none>"
-        raise KeyError(f"UI artifact alias '{alias}' not found. Available: [{available}]")
-
     # ---------- helpers ----------
     @property
     def api_state(self) -> dict[str, Any]:
