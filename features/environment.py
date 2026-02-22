@@ -11,13 +11,14 @@ if project_root not in sys.path:
 
 from src.core.config.config import Config
 from src.core.behave.scenario_data import ScenarioData
-from src.core.security.token_manager import TokenManager
+from hooks.resources.registry import ResourceRegistry
+from hooks.tag_router import handle_before_tag, handle_after_tag
 
 
 def before_all(context: Any) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s - %(message)s")
     context.config_obj = Config.load(getattr(context.config, "userdata", {}))
-    context.token_manager = TokenManager()
+    context.resources = ResourceRegistry()
 
 
 def before_scenario(context: Any, scenario: Any) -> None:
@@ -28,12 +29,21 @@ def before_scenario(context: Any, scenario: Any) -> None:
     context.http_state = context.data.api_state  # backward compatibility for old steps
     context.state = context.data.api_state
     context.ui = getattr(context, "ui", {})
+    context.resources.begin_scenario()
 
 
 def after_scenario(context: Any, scenario: Any) -> None:
-    pass
+    context.resources.teardown_scenario()
 
 
 def after_all(context: Any) -> None:
-    if getattr(context, "db_client", None):
-        context.db_client.close()
+    # global teardown handled per scenario; nothing extra for now
+    pass
+
+
+def before_tag(context: Any, tag: str) -> None:
+    handle_before_tag(context, tag)
+
+
+def after_tag(context: Any, tag: str) -> None:
+    handle_after_tag(context, tag)

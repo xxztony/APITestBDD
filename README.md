@@ -17,6 +17,16 @@ This repository contains Behave-based E2E tests for API and systems.
    behave --tags @api
    ```
 
+## 资源管理与能力型 Tags
+- 资源注册表：`context.resources` (ResourceRegistry) 统一管理 api/auth/ui/db/kafka 资源，按场景启用并在 after_scenario 自动回收。
+- Tags 触发：
+  - `@auth` → TokenManager (resources["auth"], context.token_manager)
+  - `@api` → HttpClientFactory + ClientRegistry (resources["api"], context.clients/http_client_factory/systems)
+  - `@ui` → driver (resources["ui"], context.ui/driver，禁止放入 shared_data)
+  - `@db` → DbClient (resources["db"], context.db_client)
+  - `@kafka` → KafkaClient (resources["kafka"], context.kafka_client)
+- environment.py 仅调度 hooks；具体初始化在 hooks/resources/*.py，能力映射在 hooks/tag_router.py。
+
 ## API 测试使用方法（Behave）
 
 ### 核心共享数据
@@ -109,12 +119,13 @@ Then I save response "create_user" field "id" as "user_id"
 写入 `common.entities.user_id` 与 `common.vars.user_id`。
 
 ## 示例场景
-- `features/examples/resource_tags_demo.feature`：演示基于 shared_data 的 API 调用（需配置 crds.http.base_url）。
+- `features/examples/resource_tags_demo.feature`：演示 @api @auth tag 触发资源，并断言 resources 内包含 api/auth。
   ```gherkin
   @api @auth
-  Scenario: API call with shared_data context
+  Scenario: API runtime is wired via tag hooks
     Given I use service "crds"
     When I send "GET" request to "/health"
     Then HTTP status should be 200
+    Then resources should include api, auth
   ```
 - `features/multi_response_example.feature`：演示多响应 alias、占位符替换与跨调用断言。
