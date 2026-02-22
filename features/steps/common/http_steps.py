@@ -6,7 +6,7 @@ from src.core.http.http_client import HttpClient
 
 
 def _get_data(context):
-    return getattr(context, "data", None)
+    return getattr(context, "http_data", None) or getattr(context, "data", None)
 
 
 def _get_request_context(context):

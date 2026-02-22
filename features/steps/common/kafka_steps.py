@@ -8,7 +8,7 @@ from src.core.messaging.kafka_client import KafkaClient
 
 
 def _get_data(context):
-    return getattr(context, "data", None)
+    return getattr(context, "http_data", None) or getattr(context, "data", None)
 
 
 def _require_kafka_client(context) -> KafkaClient:

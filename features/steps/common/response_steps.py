@@ -8,7 +8,7 @@ from behave import given, then
 
 
 def _get_data(context):
-    return getattr(context, "data", None)
+    return getattr(context, "http_data", None) or getattr(context, "data", None)
 
 
 def _get_response(context, alias: str | None = None):

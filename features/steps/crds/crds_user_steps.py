@@ -7,7 +7,7 @@ from src.types.crds.user_status import UserStatus
 
 
 def _get_data(context):
-    return getattr(context, "data", None)
+    return getattr(context, "http_data", None) or getattr(context, "data", None)
 
 
 def _store_response(context, response, response_name: str | None = None) -> None:
