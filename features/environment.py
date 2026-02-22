@@ -25,6 +25,7 @@ def before_scenario(context: Any, scenario: Any) -> None:
     shared_data = ScenarioData._fresh_template()
     context.shared_data = shared_data
     context.data = ScenarioData(context, shared_data)
+    context.shared = context.data  # alias for unified access
 
 
 def after_scenario(context: Any, scenario: Any) -> None:
