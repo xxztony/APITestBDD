@@ -72,6 +72,16 @@ When I send "POST" request to "/users" with body:
 Then HTTP status should be 201
 Then I save response "last" field "id" as "user_id"
 ```
+`I send "{method}" request to "{path}" with body:` 适合临时构造 JSON 请求，body 来自 DataTable。
+
+使用封装客户端的 body 版：
+```gherkin
+When I call "create_user" on "crds_user" client with body:
+  | field | value        |
+  | email | {user_email} |
+Then HTTP status should be 201
+```
+`I call "{method_name}" on "{client_name}" client with body:` 会把 DataTable 转为 payload/字典后传给指定客户端方法。
 
 ### 使用客户端方法（client_steps）
 适用于已有封装客户端（如 `context.clients["crds_user"]`）：
