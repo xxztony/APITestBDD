@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from src.core.config.config import Config
 from src.core.http.http_client import HttpClient
@@ -36,27 +35,8 @@ class HttpClientFactory:
         self._clients[key] = client
         return client
 
-    def close_all(self) -> None:
-        for client in self._clients.values():
-            session = getattr(client, "_session", None)
-            if session and hasattr(session, "close"):
-                try:
-                    session.close()
-                except Exception:  # noqa: BLE001
-                    logger.warning("Failed to close HttpClient session", exc_info=True)
-
-
 class ClientRegistry(dict):
     """Holds API clients keyed by name."""
-
-
-@dataclass
-class ApiRuntime:
-    http_factory: HttpClientFactory
-    clients: ClientRegistry
-
-    def close(self) -> None:
-        self.http_factory.close_all()
 
 
 def _bool_from_config(config: Config, key: str, default: bool = False) -> bool:
@@ -69,12 +49,12 @@ def _bool_from_config(config: Config, key: str, default: bool = False) -> bool:
 def ensure_api(context) -> ApiRuntime:
     registry: ResourceRegistry = context.resources
     if registry.has("api"):
-        runtime: ApiRuntime = registry.get("api")
+        runtime: dict[str, Any] = registry.get("api")
         registry.mark_enabled("api")
         if _has_service(context, "crds"):
-            context.http_client = runtime.http_factory.get("crds")
-        context.clients = runtime.clients
-        context.systems = getattr(context, "systems", runtime.clients)
+            context.http_client = runtime["http_factory"].get("crds")
+        context.clients = runtime["clients"]
+        context.systems = getattr(context, "systems", runtime["clients"])
         return runtime
 
     # ensure auth dependency
@@ -100,7 +80,7 @@ def ensure_api(context) -> ApiRuntime:
             clients["crds_user"] = CrdsUserClient(crds_http)
             systems["crds_user"] = CRDSUser(context)
 
-    runtime = ApiRuntime(http_factory=http_factory, clients=clients)
+    runtime = {"http_factory": http_factory, "clients": clients}
     registry.set("api", runtime)
     registry.mark_enabled("api")
 
@@ -116,4 +96,4 @@ def _has_service(context, service: str) -> bool:
     config: Config = context.config_obj
     return bool(config.get(f"{service}.http.base_url"))
 
-__all__ = ["ensure_api", "ApiRuntime", "HttpClientFactory", "ClientRegistry"]
+__all__ = ["ensure_api", "HttpClientFactory", "ClientRegistry"]
