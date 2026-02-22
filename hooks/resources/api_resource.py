@@ -35,10 +35,6 @@ class HttpClientFactory:
         self._clients[key] = client
         return client
 
-class ClientRegistry(dict):
-    """Holds API clients keyed by name."""
-
-
 def _bool_from_config(config: Config, key: str, default: bool = False) -> bool:
     raw = config.get(key, default)
     if isinstance(raw, str):
@@ -64,7 +60,7 @@ def ensure_api(context) -> ApiRuntime:
     validate_schema = _bool_from_config(config, "validate_schema", False)
     http_factory = HttpClientFactory(config, context.token_manager, validate_schema=validate_schema, timeout=10.0)
 
-    clients = ClientRegistry()
+    clients: dict[str, Any] = {}
     systems: dict[str, Any] = {}
 
     # Register known service clients (extendable)
@@ -96,4 +92,4 @@ def _has_service(context, service: str) -> bool:
     config: Config = context.config_obj
     return bool(config.get(f"{service}.http.base_url"))
 
-__all__ = ["ensure_api", "HttpClientFactory", "ClientRegistry"]
+__all__ = ["ensure_api", "HttpClientFactory"]
