@@ -5,7 +5,7 @@ from typing import Any, Mapping
 
 
 class ScenarioData:
-    """Helper/registry to manage per-scenario shared data partitions."""
+    """Lightweight helper over shared_data dict for API-first usage."""
 
     TEMPLATE = {
         "common": {
@@ -26,47 +26,15 @@ class ScenarioData:
 
     def __init__(self, context: Any, shared_data: dict[str, Any] | None = None) -> None:
         self.context = context
-        self.raw: dict[str, Any] = shared_data or self._fresh_template()
-        self._ensure_partitions()
-        self._migrate_legacy_state()
-
-    @classmethod
-    def _fresh_template(cls) -> dict[str, Any]:
-        return copy.deepcopy(cls.TEMPLATE)
-
-    def _ensure_partitions(self) -> None:
-        for key, value in self.TEMPLATE.items():
-            self.raw.setdefault(key, copy.deepcopy(value))
-        # ensure nested dicts exist
-        self.raw["common"].setdefault("entities", {})
+        self.raw: dict[str, Any] = copy.deepcopy(shared_data) if shared_data is not None else copy.deepcopy(self.TEMPLATE)
+        self.raw.setdefault("common", {}).setdefault("entities", {})
         self.raw["common"].setdefault("vars", {})
         self.raw["common"].setdefault("db", {})
         self.raw["common"].setdefault("kafka", {})
-        self.raw["api"].setdefault("responses", {})
+        self.raw.setdefault("api", {}).setdefault("responses", {})
         self.raw["api"].setdefault("requests", {})
-        self.raw["ui"].setdefault("artifacts", {})
+        self.raw.setdefault("ui", {}).setdefault("artifacts", {})
         self.raw["ui"].setdefault("pages", {})
-
-    def _migrate_legacy_state(self) -> None:
-        """Pull legacy context.http_state/context.state into new structure for compatibility."""
-        legacy_state = getattr(self.context, "http_state", None) or getattr(self.context, "state", None)
-        if not isinstance(legacy_state, dict):
-            return
-        if legacy_state.get("responses"):
-            self.raw["api"]["responses"].update(legacy_state.get("responses") or {})
-        if legacy_state.get("response"):
-            self.raw["api"]["responses"]["last"] = legacy_state.get("response")
-        legacy_vars = legacy_state.get("vars") or {}
-        if isinstance(legacy_vars, dict):
-            for key, value in legacy_vars.items():
-                try:
-                    self.put_var(key, value, overwrite=True)
-                except Exception:
-                    self.raw["common"]["vars"][key] = str(value)
-        legacy_entities = legacy_state.get("entities") or {}
-        if isinstance(legacy_entities, dict):
-            for key, value in legacy_entities.items():
-                self.raw["common"]["entities"].setdefault(key, value)
 
     # ---------- API responses ----------
     def put_response(self, alias: str, response: Any, *, overwrite: bool = False) -> None:
@@ -181,5 +149,3 @@ class ScenarioData:
         ctx.setdefault("params", {})
         ctx.setdefault("json", {})
         return ctx
-
-PYCODE

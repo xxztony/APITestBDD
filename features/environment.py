@@ -22,7 +22,7 @@ def before_all(context: Any) -> None:
 
 def before_scenario(context: Any, scenario: Any) -> None:
     # fresh per-scenario shared data with legacy compatibility
-    shared_data = ScenarioData._fresh_template()
+    shared_data = ScenarioData.TEMPLATE.copy()
     context.shared_data = shared_data
     context.data = ScenarioData(context, shared_data)
     context.shared = context.data  # alias for unified access
