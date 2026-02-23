@@ -1,6 +1,7 @@
 # PythonProject
 
 This repository contains Behave-based E2E tests for API and systems.
+English version: `README.en.md`
 
 ## Quickstart
 
