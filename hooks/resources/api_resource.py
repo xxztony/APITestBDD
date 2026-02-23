@@ -3,12 +3,28 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import importlib
+
 from src.core.config.config import Config
 from src.core.http.http_client import HttpClient
 from hooks.resources.auth_resource import ensure_auth
 from hooks.resources.registry import ResourceRegistry
 
 logger = logging.getLogger(__name__)
+
+def service_to_module(service: str) -> str:
+    # return f"api.{service}.api"
+    return f"src.api.{service.lower()}.{service.lower()}_api"
+
+def try_load_api_class(module_name: str, class_name: str):
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError:
+        return None
+    except Exception:
+        return None
+
+    return getattr(module, class_name, None)
 
 
 class HttpClientFactory:
@@ -19,10 +35,20 @@ class HttpClientFactory:
         self._timeout = timeout
         self._clients: dict[str, HttpClient] = {}
 
-    def get(self, service: str) -> HttpClient:
+    def get(self, service: str):
         key = service or "default"
         if key in self._clients:
             return self._clients[key]
+
+        module_name = service_to_module(key)
+        class_name = key+"Api"
+        ApiCls = try_load_api_class(module_name, class_name)
+
+        if ApiCls:
+            client = ApiCls()
+            self._clients[key] = client
+            return client
+
         base_url = self._config.get(f"{key}.http.base_url") or self._config.get("http.base_url")
         if not base_url:
             raise ValueError(f"Missing base_url for service '{key}' (expect {key}.http.base_url)")
