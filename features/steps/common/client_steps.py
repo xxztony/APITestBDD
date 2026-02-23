@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-import os
 import re
+from pathlib import Path
 
 from behave import when
 
@@ -91,11 +91,20 @@ def _load_raw_json_payload(data, raw_text: str):
 
 
 def _load_json_payload_from_file(data, file_path: str):
-    abs_path = file_path if os.path.isabs(file_path) else os.path.join(os.getcwd(), file_path)
-    if not os.path.exists(abs_path):
+    path = Path(file_path)
+    if not path.is_absolute():
+        project_root = Path(__file__).resolve().parents[3]
+        project_candidate = project_root / path
+        cwd_candidate = Path.cwd() / path
+        if project_candidate.exists():
+            path = project_candidate
+        elif cwd_candidate.exists():
+            path = cwd_candidate
+        else:
+            path = project_candidate
+    if not path.exists():
         raise AssertionError(f"Payload file not found: {file_path}")
-    with open(abs_path, "r", encoding="utf-8") as f:
-        raw = f.read()
+    raw = path.read_text(encoding="utf-8")
     return _load_raw_json_payload(data, raw)
 
 
